@@ -83,6 +83,7 @@ def main():
 
     tmp = os.path.join(root, "0_pruned")
     shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp, exist_ok=True)          # pycolmap.write() will not create the folder
     rec.write(str(tmp))
 
     # verify before touching the live model
