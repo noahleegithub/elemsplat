@@ -42,7 +42,7 @@ EOF
 # -----------------------------------------------------------------------------
 if [ "${WHAT}" = "all" ] || [ "${WHAT}" = "brpcd" ]; then
   hw_banner "BrPCD -> ${BRPCD_RAW}"
-  find "${BRPCD_RAW}/archives" -name "*.part" -delete
+  find "${BRPCD_RAW}/archives" -name "*part*" -delete
   if [ -z "$(ls -A "${BRPCD_RAW}/archives" 2>/dev/null)" ]; then
     ( cd "${BRPCD_RAW}/archives" && gdown --folder "${BRPCD_GDRIVE_FOLDER}" -O . ) \
       || echo "WARNING: gdown failed -- see the header of this script for the manual route"
