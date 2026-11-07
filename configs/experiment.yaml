@@ -1,0 +1,155 @@
+# =============================================================================
+# configs/experiment.yaml -- every ANALYSIS setting of the final project.
+#
+# Units are metres unless noted. Values listed under a "tune" grid are chosen
+# on the validation bridges of each fold (Track A) and frozen before any test
+# bridge is scored. Equation numbers refer to the paper (paper/main.tex).
+# Cluster, paths and software versions are in config.sh, not here.
+# =============================================================================
+seed: 0
+
+# -----------------------------------------------------------------------------
+# Track A data: BrPCD (Zhang et al., 2025)
+# -----------------------------------------------------------------------------
+brpcd:
+  unit_scale: 1.0               # raw coordinates x this = metres (0.001 if the inspection shows mm)
+  classes: [girder, deck, pier, main_cable, suspender, stay]
+  class_patterns: configs/brpcd_classes.yaml
+  real_scan_regex: '^(?!.*-f-)' # bridge folders without "-f-" are the 10 real scans (README naming)
+  point_extensions: [.txt, .xyz, .pts, .csv, .asc, .ply, .pcd, .las, .laz, .npy]
+  voxel_size: auto              # auto = 2 x median nearest-neighbour spacing of the real scans (1 cm steps)
+  voxel_size_min: 0.02
+  voxel_size_max: 0.20
+  normals_k: 16
+  min_instance_points: 30       # member files with fewer points after voxelisation are dropped (logged)
+
+splits:
+  mode: loo                     # loo = leave-one-bridge-out over the 10 real scans | fixed3
+  fixed_test: []                # bridge ids for mode fixed3 (one per bridge type), set after inspection
+  val_per_fold: 1               # real scans (with their variants) kept out of training for tuning
+
+# -----------------------------------------------------------------------------
+# Semantic baselines (Eq. 3): PointNet and PointNet++, pure PyTorch
+# -----------------------------------------------------------------------------
+semseg:
+  models: [pointnet, pointnet2]
+  block_size: 10.0              # horizontal square block in the bridge frame, full height
+  block_points: 4096
+  batch_size: 16
+  iterations: 20000
+  lr: 0.001
+  weight_decay: 0.0001
+  warmup_iters: 500
+  class_weight_power: 0.5       # w_c proportional to n_c^-0.5
+  val_every: 2000
+  infer_stride: 5.0             # sliding blocks at inference; logits averaged per point
+  augment:
+    rotate_z_deg: 10.0          # small yaw jitter (bridge axis is already on x)
+    flip_y: true
+    jitter: 0.01
+    scale: [0.9, 1.1]
+  num_workers: 6
+  amp: true
+
+# -----------------------------------------------------------------------------
+# Instance methods
+# -----------------------------------------------------------------------------
+m1:                             # DBSCAN per predicted class (Eq. 4); tuned per class
+  eps_grid: [0.10, 0.20, 0.30, 0.50, 0.80, 1.20]
+  min_pts_grid: [5, 10, 20, 40]
+
+m2:                             # layout-guided assignment (Eqs. 1, 2, 5-7)
+  deck_ransac_thresh: 0.08      # delta
+  ransac_iters: 1000
+  kde_bw_station: 1.0           # b_s
+  kde_bw_offset: 0.15           # b_t
+  peak_eta: 0.15                # eta
+  station_min_sep: 5.0          # supports are at least this far apart
+  offset_min_sep: 0.6           # girder lines are at least this far apart
+  offset_valley_frac: 0.15      # neighbouring peaks with a filled valley = one (box) girder
+  end_edge_bin: 0.25            # superstructure ends: outermost 0.25 m bins with at least ...
+  end_edge_frac: 0.2            # ... 0.2 x the median bin count of girder (else deck) points
+  cable_thresh: 0.15            # delta_c
+  cable_min_inliers: 40         # m_min
+  cable_max_lines: 600
+  anchor_gap_factor: 1.5
+  tune:                         # searched on the validation bridges (best mean PQ)
+    kde_bw_station: [0.5, 1.0, 2.0]
+    kde_bw_offset: [0.10, 0.15, 0.25]
+    peak_eta: [0.10, 0.15, 0.25]
+    cable_thresh: [0.10, 0.15, 0.25]
+
+m3:                             # optional boundary refinement (Eq. 8)
+  enabled: false
+  boundary_band: 0.30           # delta_b
+
+metrics:
+  pq_iou: 0.5
+  min_segment_points: 30        # smaller predicted segments count as noise
+  bootstrap: 2000
+  ci: 0.95
+
+# -----------------------------------------------------------------------------
+# Track B data: VTTI bridge (Sarlo and Ildefonzo, 2025)
+# -----------------------------------------------------------------------------
+vtti:
+  model: FRO                    # shipped COLMAP project used for poses (full resolution, OpenCV camera)
+  long_side_px: 1600
+  test_every: 8                 # every 8th image (sorted by name) is a test view, as in 3DGS --eval
+  spans_ft: [90.0, 150.0, 90.0]
+  main_span_index: 1            # the span that fixes the scale (Eq. 17)
+
+gs3d:                           # Eqs. 10-12, official code
+  iterations: 30000
+  lambda_dssim: 0.2
+  densify_grad_threshold: 0.0002
+  densify_until_iter: 15000
+  data_device: cuda             # set cpu if the GPU runs out of memory with all images loaded
+
+gs2d:                           # Eqs. 13-15, official code
+  iterations: 30000
+  lambda_dssim: 0.2
+  lambda_dist: 100.0            # Huang et al. (2024), unbounded scenes
+  lambda_normal: 0.05
+  train_depth_ratio: 0.0
+  mesh_depth_ratios: [1.0, 0.0] # median depth first, expected depth as a check
+  tsdf_voxel_m: 0.05            # converted to SfM units with the provisional scale
+  sdf_trunc_voxels: 5
+  depth_trunc_m: 60.0
+  num_cluster: 50
+
+vggt:                           # feed-forward baseline (Wang et al., 2025), no camera input
+  enabled: true                 # false: 03g is skipped and the VGGT rows disappear from the tables
+  max_frames: 200               # uniform subset of the registered images in ONE forward pass
+                                #   (about 40 GB on an H100 at 200 frames in bf16; 250-300 fit on 80 GB)
+  conf_percentile: 50           # keep pixels whose depth confidence is above this percentile
+  max_points: 3000000           # uniform subsample of the kept pixels (same budget as the 2DGS samples)
+
+points:
+  gs3d_min_opacity: 0.5         # 3DGS point cloud = centres of Gaussians above this opacity
+  mesh_samples: 3000000         # 2DGS point cloud = area-uniform samples of the TSDF mesh
+
+measure:                        # Eqs. 17-19
+  deck_ransac_thresh_m: 0.10
+  deck_normal_max_deg: 15.0
+  girder_band_m: [-3.0, -0.3]   # heights below the deck plane that hold the girders
+  pier_below_deck_m: 3.5        # pier candidates lie below the girders ...
+  ground_clearance_m: 1.0       # ... and above the ground
+  pier_kde_bw_m: 1.0
+  pier_box_halfwidth_m: 2.0
+  station_pct: [5, 95]          # pier station = midpoint of these percentiles of s
+  end_station_pct: [1, 99]      # fallback ends (cloud extent) when the girder band is empty
+  end_edge_bin_m: 0.25          # girder-band ends: outermost 0.25 m bins with at least ...
+  end_edge_frac: 0.2            # ... 0.2 x the median bin count (no percentile bias)
+  deck_patch_m: 2.0
+  deck_band_m: [-0.15, 0.15]    # deck-top points used for Eq. 19 (slab underside excluded)
+  patch_min_points: 50
+  overrides: configs/vtti_overrides.yaml
+
+merge:                          # RQ3
+  semseg_model: pointnet2
+  checkpoint: all               # the network trained on every BrPCD cloud
+  crop_margin_m: 3.0
+  ref_counts:
+    piers: 2
+    girders: null               # count the girders on the photographs, then fill in

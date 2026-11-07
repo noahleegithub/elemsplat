@@ -1,0 +1,11 @@
+# configs/vtti_overrides.yaml -- manual inputs for the VTTI measurement (Track B, RQ3).
+#
+# Coordinates are in the aligned metric frame written by measure_vtti.py
+# (s along the bridge axis, t across it, h above the deck plane, metres).
+# Workflow: run 03e once, open final_results/trackB/measure/diag_*.png, compare the
+# automatic pier boxes in pier_boxes_auto.yaml with the photographs, then copy the
+# corrected boxes here and rerun 03e. The same boxes are used for 3DGS and 2DGS.
+pier_boxes: []          # e.g. - {s: [26.0, 29.5], t: [-6.0, 6.0], h: [-9.0, -3.5]}
+end_stations: null      # [s_start, s_end]: abutment bearing lines; null = girder-band ends
+end_station_source: null   # "bearings" or "deck end joints" (stated in the report)
+girder_count_ref: null  # girders counted on the photographs (RQ3 reference); overrides experiment.yaml

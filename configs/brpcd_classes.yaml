@@ -1,0 +1,19 @@
+# configs/brpcd_classes.yaml -- maps BrPCD folder / file names to the six classes.
+#
+# A member file gets the FIRST class whose pattern matches (case-insensitive regex)
+# its path relative to the bridge folder. Order matters: main_cable must come
+# before stay because "cable" alone means a stay cable.
+# Check scripts/brpcd_inspect.py output (inspect_report.txt) after download and
+# extend the patterns if a name is reported as "unmatched".
+# The Chinese strings are data, not comments: BrPCD comes from a Chinese group and its
+# member files may carry Chinese names, so the patterns cover both spellings.
+order: [main_cable, suspender, stay, girder, deck, pier]
+patterns:
+  main_cable: ['main[ _-]?cable', 'maincable', 'mcable', '主缆']
+  suspender:  ['suspender', 'hanger', '吊杆', '吊索']
+  stay:       ['stay', 'cable', '斜拉索', '拉索']
+  girder:     ['girder', 'beam', 'maingirder', '主梁']
+  deck:       ['deck', 'slab', 'pavement', '桥面', '面板']
+  pier:       ['pier', 'tower', 'pylon', 'column', 'bent', '桥墩', '桥塔', '塔', '墩']
+# Names that are not members (skipped without a warning)
+ignore: ['readme', 'license', 'thumbs', '\.ds_store', '__macosx']
