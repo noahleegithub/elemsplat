@@ -123,18 +123,36 @@ export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 _hw_load_first () {        # _hw_load_first "A/1 A/2 ..."  -> loads the first module that exists
   local m
   for m in $1; do
-    if module load "${m}" >/dev/null 2>&1; then echo "${m}"; return 0; fi
+    if module load "${m}" >/dev/null 2>&1; then
+      # Lmod module load affects the current shell environment; print name on fd 3 or stdout
+      echo "${m}"
+      return 0
+    fi
   done
   return 1
 }
 
 hw_load_modules () {       # hw_load_modules [cuda]   (cuda = also GCC + CUDA, for building/running CUDA code)
   module purge >/dev/null 2>&1
-  HW_ANACONDA_LOADED=$(_hw_load_first "${ANACONDA_MODULES}") || {
-    echo "[config] no Anaconda3 module -- run: module spider Anaconda3"; return 1; }
+  local a g c
+  for m in ${ANACONDA_MODULES}; do
+    if module load "${m}" >/dev/null 2>&1; then a="${m}"; break; fi
+  done
+  [ -n "${a}" ] || { echo "[config] no Anaconda3 module -- run: module spider Anaconda3"; return 1; }
+  HW_ANACONDA_LOADED="${a}"
+
   if [ "${1:-}" = "cuda" ]; then
-    HW_GCC_LOADED=$(_hw_load_first "${GCC_MODULES}")   || { echo "[config] no GCC module from: ${GCC_MODULES}";  return 1; }
-    HW_CUDA_LOADED=$(_hw_load_first "${CUDA_MODULES}") || { echo "[config] no CUDA module from: ${CUDA_MODULES}"; return 1; }
+    for m in ${GCC_MODULES}; do
+      if module load "${m}" >/dev/null 2>&1; then g="${m}"; break; fi
+    done
+    [ -n "${g}" ] || { echo "[config] no GCC module from: ${GCC_MODULES}"; return 1; }
+    HW_GCC_LOADED="${g}"
+
+    for m in ${CUDA_MODULES}; do
+      if module load "${m}" >/dev/null 2>&1; then c="${m}"; break; fi
+    done
+    [ -n "${c}" ] || { echo "[config] no CUDA module from: ${CUDA_MODULES}"; return 1; }
+    HW_CUDA_LOADED="${c}"
   fi
   module load WebProxy >/dev/null 2>&1 || true      # outbound internet on compute nodes (harmless elsewhere)
   export HW_ANACONDA_LOADED HW_GCC_LOADED HW_CUDA_LOADED
