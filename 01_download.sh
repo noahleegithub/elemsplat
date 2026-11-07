@@ -43,7 +43,7 @@ EOF
 if [ "${WHAT}" = "all" ] || [ "${WHAT}" = "brpcd" ]; then
   hw_banner "BrPCD -> ${BRPCD_RAW}"
   if [ -z "$(ls -A "${BRPCD_RAW}/archives" 2>/dev/null)" ]; then
-    gdown --folder "https://drive.google.com/drive/folders/${BRPCD_GDRIVE_FOLDER}" -O "${BRPCD_RAW}/archives" --remaining-ok \
+    gdown --folder "https://drive.google.com/drive/folders/${BRPCD_GDRIVE_FOLDER}" -O "${BRPCD_RAW}/archives" \
       || echo "WARNING: gdown failed -- see the header of this script for the manual route"
   else
     echo "archives already present: $(ls "${BRPCD_RAW}/archives" | tr '\n' ' ')"
