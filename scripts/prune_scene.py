@@ -73,16 +73,13 @@ def main():
         return 0
 
     # one frame may hold several images; drop the frame only when all of its images are missing
-    frame_ids = sorted({rec.images[n].frame_id for n in missing
-                        if rec.images[n].is_ref_in_frame})
-    kept_images = {im.name for im in rec.images.values() if im.name in on_disk}
-    droppable = [f for f in frame_ids
-                 if not (set(rec.frames[f].image_ids) & {i for i in rec.images
-                                                          if rec.images[i].name in kept_images})]
+    kept_ids = {im.image_id for im in rec.images.values() if im.name in on_disk}
+    frame_ids = sorted({im.frame_id for im in rec.images.values() if im.name not in on_disk})
+    droppable = [f for f in frame_ids if not (set(rec.frames[f].image_ids) & kept_ids)]
     for f in droppable:
         rec.deregister_frame(f)
-    if len(rec.images) != len(kept_images):
-        log(f"WARNING: {len(rec.images)} images left, expected {len(kept_images)}")
+    if len(rec.images) != len(kept_ids):
+        log(f"WARNING: {len(rec.images)} images left, expected {len(kept_ids)}")
 
     tmp = os.path.join(root, "0_pruned")
     shutil.rmtree(tmp, ignore_errors=True)
@@ -93,8 +90,8 @@ def main():
     still = [im.name for im in chk.images.values() if im.name not in on_disk]
     if still:
         sys.exit(f"ERROR: pruned model still references {len(still)} missing files, e.g. {still[0]}")
-    if len(chk.images) != len(kept_images):
-        sys.exit(f"ERROR: pruned model has {len(chk.images)} images, expected {len(kept_images)}")
+    if len(chk.images) != len(kept_ids):
+        sys.exit(f"ERROR: pruned model has {len(chk.images)} images, expected {len(kept_ids)}")
 
     backup = os.path.join(root, "0_dropped")
     shutil.rmtree(backup, ignore_errors=True)
