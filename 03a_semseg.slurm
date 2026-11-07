@@ -25,7 +25,7 @@ for _cfg in "$(dirname "${BASH_SOURCE[0]}")/config.sh" "${PWD}/config.sh" "${SLU
   if [ -f "${_cfg}" ]; then source "${_cfg}"; break; fi
 done
 [ -n "${HW_SCRIPTS}" ] || { echo "ERROR: config.sh not found -- cd into final_hprc first"; exit 1; }
-hw_load_modules || exit 1
+hw_load_modules cuda || exit 1
 hw_activate_pc || exit 1
 MODEL="${MODEL:-pointnet2}"
 K="${SLURM_ARRAY_TASK_ID:-${FOLD:-0}}"

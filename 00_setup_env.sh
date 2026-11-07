@@ -80,7 +80,7 @@ python -c "import diff_surfel_rasterization" 2>/dev/null || {
 }
 # VGGT: the package itself without its dependency list (it would pull opencv-python and numpy 2);
 # the model only needs einops, safetensors and huggingface_hub on top of torch/torchvision/Pillow
-python -m pip install --no-deps -e "${VGGT_REPO}" einops safetensors huggingface_hub || exit 1
+python -m pip install --no-deps -e "${VGGT_REPO}" einops safetensors "huggingface_hub>=0.23.0" httpx2 || exit 1
 python -m pip install "numpy<2"
 python - <<'EOF' || exit 1
 import torch, numpy, diff_gaussian_rasterization, diff_surfel_rasterization, simple_knn, fused_ssim, pycolmap, open3d
@@ -104,8 +104,11 @@ EOF
 
 # -----------------------------------------------------------------------------
 hw_banner "STEP 4/5  pre-download LPIPS (VGG) weights into TORCH_HOME=${TORCH_HOME} and VGGT-1B into HF_HOME=${HF_HOME}"
+hw_load_modules cuda || exit 1
+hw_activate_pc || exit 1
 python -c "import lpips; lpips.LPIPS(net='vgg', verbose=False); print('LPIPS VGG weights cached')" || \
   echo "WARNING: LPIPS weights not cached; image_metrics.py will try again (WebProxy) or skip LPIPS"
+hw_load_modules cuda || exit 1
 hw_activate_gs || exit 1
 # only the files are fetched (about 5 GB); the model is not built here (login-node memory limit)
 python - <<EOF || echo "WARNING: VGGT weights not cached; 03g_vggt.slurm will fail offline -- download model.pt by hand into ${TORCH_HOME}/hub/checkpoints/"

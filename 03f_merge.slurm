@@ -22,7 +22,7 @@ for _cfg in "$(dirname "${BASH_SOURCE[0]}")/config.sh" "${PWD}/config.sh" "${SLU
   if [ -f "${_cfg}" ]; then source "${_cfg}"; break; fi
 done
 [ -n "${HW_SCRIPTS}" ] || { echo "ERROR: config.sh not found -- cd into final_hprc first"; exit 1; }
-hw_load_modules || exit 1
+hw_load_modules cuda || exit 1
 hw_activate_pc || exit 1
 METHOD="${METHOD:-2dgs}"                                   # 2dgs (paper) | 3dgs | 2dgs_mean | vggt
 OUT="${RESULTS_DIR}/rq3"; [ "${METHOD}" = "2dgs" ] || OUT="${RESULTS_DIR}/rq3_${METHOD}"
