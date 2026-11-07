@@ -15,6 +15,7 @@ import argparse
 import csv
 import os
 import shutil
+import subprocess
 import sys
 import time
 
@@ -162,6 +163,21 @@ def main():
         os.remove(txt_path)
     cio.write_cameras_bin(new, bin_path)
     shutil.rmtree(tmp, ignore_errors=True)
+
+    # ---- drop registered images that have no file ---------------------------------------------
+    # pycolmap.undistort_images keeps every camera of the source model, but the FRO project
+    # registers 12 DJI_ frames that are not in the Full Resolution archive. Left in, they enter
+    # the train/test split and 3DGS dies on the first missing file, so prune before splitting.
+    pr = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                     "prune_scene.py"),
+                         "--scene", a.scene, "--max-frac", "0.10", "--keep-original"],
+                        capture_output=True, text=True)
+    log((pr.stdout.strip() or pr.stderr.strip())[-500:])
+    if pr.returncode != 0:
+        log("WARNING: scene pruning failed -- the scene may reference images that do not exist")
+    ucams, uims, _ = cio.read_model(os.path.join(a.scene, "sparse", "0"))
+    names = sorted(im.name for im in uims.values())
+    report["n_images_scene"] = len(uims)
 
     # ---- split, GPS, provisional frame -------------------------------------------------------
     train, test = cio.llff_split([im.name for im in uims.values()], vc["test_every"])

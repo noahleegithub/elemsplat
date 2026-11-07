@@ -78,8 +78,8 @@ def main():
     droppable = [f for f in frame_ids if not (set(rec.frames[f].image_ids) & kept_ids)]
     for f in droppable:
         rec.deregister_frame(f)
-    if len(rec.images) != len(kept_ids):
-        log(f"WARNING: {len(rec.images)} images left, expected {len(kept_ids)}")
+    # rec.images keeps the deregistered images until the model is written, so the count below
+    # is only a hint; the read-back check after write() is the real gate.
 
     tmp = os.path.join(root, "0_pruned")
     shutil.rmtree(tmp, ignore_errors=True)
