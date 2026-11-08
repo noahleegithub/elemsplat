@@ -7,9 +7,11 @@
 #      MODEL=pointnet2 sbatch --array=0-10 03a_semseg.slurm
 #      MODEL=pointnet  sbatch --array=0-10 03a_semseg.slurm
 #  Expected per task on an A30: PointNet ~20-30 min, PointNet++ ~1-1.5 h (20k iterations).
+#  Measured on ACES: 43 min to 3 h for most folds; the heaviest fold needed >6 h and hit the
+#  walltime, so the limit is 12 h (SUs are charged on walltime used, not requested).
 # =============================================================================
 #SBATCH --job-name=fp_semseg
-#SBATCH --time=06:00:00
+#SBATCH --time=12:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
