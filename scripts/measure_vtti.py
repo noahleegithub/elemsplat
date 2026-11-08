@@ -70,6 +70,16 @@ def auto_boxes(s, t, h, k0, hw, ground_h, mc):
     """Pier candidates: below the girders, above the ground, under the deck -> KDE peaks along s."""
     sm, tm, hm = s * k0, t * k0, h * k0
     gh_m, hw_m = ground_h * k0, hw * k0
+    # deck_and_ground() calls the lowest large plane "ground", but a plane 1 m under the deck is
+    # the slab soffit or a girder plane, not terrain: the pier band (h < -pier_below_deck_m and
+    # h > ground + clearance) is then empty by construction and no pier is ever found. When the
+    # detected ground cannot be under the piers, fall back to a low percentile of the cloud.
+    if gh_m > -mc["pier_below_deck_m"]:
+        pct = mc.get("ground_pct_fallback", 2.0)
+        floor = float(np.percentile(hm, pct))
+        log(f"  ground plane {gh_m:.2f} m is above the pier depth {-mc['pier_below_deck_m']:.2f} m "
+            f"(soffit, not terrain) -> floor = {pct}th percentile {floor:.2f} m")
+        gh_m = floor
     cand = (hm < -mc["pier_below_deck_m"]) & (hm > gh_m + mc["ground_clearance_m"]) & (np.abs(tm) < hw_m + 1.0)
     if cand.sum() < 50:
         return [], cand

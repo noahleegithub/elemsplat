@@ -137,6 +137,7 @@ measure:                        # Eqs. 17-19
   ground_clearance_m: 1.0       # ... and above the ground
   pier_kde_bw_m: 1.0
   pier_box_halfwidth_m: 2.0
+  ground_pct_fallback: 2.0     # floor when the detected "ground" plane is above the pier depth
   station_pct: [5, 95]          # pier station = midpoint of these percentiles of s
   end_station_pct: [1, 99]      # fallback ends (cloud extent) when the girder band is empty
   end_edge_bin_m: 0.25          # girder-band ends: outermost 0.25 m bins with at least ...
