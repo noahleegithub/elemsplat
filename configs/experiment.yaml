@@ -130,7 +130,10 @@ points:
   mesh_samples: 3000000         # 2DGS point cloud = area-uniform samples of the TSDF mesh
 
 measure:                        # Eqs. 17-19
-  frame_source: trajectory      # trajectory = axis from camera centres, deck = upper envelope
+  frame_source: legacy          # legacy = RANSAC deck plane; 'trajectory' (envelope under the
+                                # flight path) was tried and rejected: on VTTI it gave a 13.1 m
+                                # deck half width, 174 mm surface RMS and a 161 m envelope, and
+                                # made the side spans worse than the RANSAC path
   corridor_halfwidth_m: 12.0    # points within this transverse distance of the flight path
   envelope_bin_m: 2.0           # along-axis bin for the deck envelope
   envelope_pct: 90              # percentile of z per bin = the deck surface
