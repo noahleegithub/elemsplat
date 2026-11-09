@@ -138,6 +138,8 @@ measure:                        # Eqs. 17-19
   pier_kde_bw_m: 1.0
   pier_box_halfwidth_m: 2.0
   ground_pct_fallback: 2.0     # floor when the detected "ground" plane is above the pier depth
+  deck_halfwidth_max_m: 12.0   # cap on the deck half width used to bound pier candidates
+  pier_sep_tol: 0.12           # accepted deviation from the GPS-predicted pier separation
   station_pct: [5, 95]          # pier station = midpoint of these percentiles of s
   end_station_pct: [1, 99]      # fallback ends (cloud extent) when the girder band is empty
   end_edge_bin_m: 0.25          # girder-band ends: outermost 0.25 m bins with at least ...
