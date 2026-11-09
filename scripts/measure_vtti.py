@@ -213,6 +213,8 @@ def main():
     ap.add_argument("--cfg", default=None)
     ap.add_argument("--overrides", default=None)
     ap.add_argument("--new-frame", action="store_true")
+    ap.add_argument("--no-gps-scale", action="store_true",
+                    help="ignore EXIF GPS and fall back to the girder-band kappa (for comparison)")
     a = ap.parse_args()
     cfg = load_cfg(a.cfg)
     mc, vc = cfg["measure"], cfg["vtti"]
@@ -237,7 +239,7 @@ def main():
     spans_ref = [v * FT_TO_M for v in vc["spans_ft"]]
     # GPS scale first: it is the only estimate that does not depend on the bridge itself, so it
     # can anchor kappa and turn the pier separation into a prediction instead of a free parameter.
-    gps = gps_scale(names, centres, os.path.join(a.trackb, "gps.csv"))
+    gps = None if a.no_gps_scale else gps_scale(names, centres, os.path.join(a.trackb, "gps.csv"))
     k_gps = gps["kappa"] if gps else None
     sep_target = spans_ref[vc["main_span_index"]] if k_gps else None
     if os.path.exists(fpath) and not a.new_frame:
