@@ -130,6 +130,12 @@ points:
   mesh_samples: 3000000         # 2DGS point cloud = area-uniform samples of the TSDF mesh
 
 measure:                        # Eqs. 17-19
+  frame_source: trajectory      # trajectory = axis from camera centres, deck = upper envelope
+  corridor_halfwidth_m: 12.0    # points within this transverse distance of the flight path
+  envelope_bin_m: 2.0           # along-axis bin for the deck envelope
+  envelope_pct: 90              # percentile of z per bin = the deck surface
+  deck_surface_band_m: 0.30     # |h| below this counts as deck surface (ends, width, RMS)
+  end_source: deck_surface      # deck_surface | girder_band
   deck_ransac_thresh_m: 0.10
   deck_normal_max_deg: 15.0
   girder_band_m: [-3.0, -0.3]   # heights below the deck plane that hold the girders

@@ -122,29 +122,44 @@ def ransac_plane(xyz, thresh, iters=1000, seed=0, ref_normal=None, max_angle_deg
 
 # ----------------------------------------------------------------------------- frame
 class Frame:
-    """Bridge frame: origin, axis u, transverse w = n x u, deck normal n, plane offset d."""
+    """Bridge frame: origin, axis u, transverse w = n x u, deck normal n, plane offset d.
 
-    def __init__(self, origin, u, w, n, d):
+    `deck` optionally holds the knots of a height profile (station, offset) so h is measured above
+    a curve rather than a single plane. A 100 m deck has crown and a vertical curve, so one plane
+    puts the girder and pier bands at the wrong height along the span.
+    """
+
+    def __init__(self, origin, u, w, n, d, deck=None):
         self.origin = np.asarray(origin, float)
         self.u, self.w, self.n = (np.asarray(v, float) for v in (u, w, n))
         self.d = float(d)
+        self.deck = None if deck is None else (np.asarray(deck[0], float), np.asarray(deck[1], float))
 
     def local(self, xyz):
-        """Eq. (2): station s, offset t, height h above the deck plane."""
+        """Eq. (2): station s, offset t, height h above the deck surface."""
         q = xyz - self.origin
-        return q @ self.u, q @ self.w, xyz @ self.n + self.d
+        s, t = q @ self.u, q @ self.w
+        h = xyz @ self.n + self.d
+        if self.deck is not None:
+            ks, kh = self.deck
+            if len(ks) >= 2:
+                h = h - np.interp(s, ks, kh)
+        return s, t, h
 
     def rotation(self):
         """3x3 matrix whose rows are u, w, n (maps world vectors into the frame)."""
         return np.stack([self.u, self.w, self.n])
 
     def to_dict(self):
-        return {"origin": self.origin.tolist(), "u": self.u.tolist(), "w": self.w.tolist(),
-                "n": self.n.tolist(), "d": self.d}
+        out = {"origin": self.origin.tolist(), "u": self.u.tolist(), "w": self.w.tolist(),
+               "n": self.n.tolist(), "d": self.d}
+        if self.deck is not None:
+            out["deck"] = [self.deck[0].tolist(), self.deck[1].tolist()]
+        return out
 
     @staticmethod
     def from_dict(d):
-        return Frame(d["origin"], d["u"], d["w"], d["n"], d["d"])
+        return Frame(d["origin"], d["u"], d["w"], d["n"], d["d"], deck=d.get("deck"))
 
 
 def principal_axis_in_plane(pts, n):

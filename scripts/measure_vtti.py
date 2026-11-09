@@ -69,6 +69,81 @@ def gps_scale(names, centres, gps_csv, trim=10.0):
             "rel_uncertainty": float(rms / max(np.ptp(X[:, 0]), 1e-9))}
 
 
+def frame_from_trajectory(xyz, centres, vdirs, mc, k, seed=0):
+    """Deck frame anchored on the flight path instead of on the largest plane.
+
+    A RANSAC plane over an outdoor UAV cloud locks onto terrain or approach road (on VTTI it
+    reported a 29 m deck half-width), which puts h = 0 in the wrong place and makes every
+    height-based test - girder band, pier band, deck flatness - meaningless. The camera centres
+    carry the same information without a plane fit: the UAV flies the corridor, so the axis is a
+    2-D PCA of the trajectory, and the deck is the upper envelope of the cloud under that corridor.
+
+    `k` is the metric scale (m per SfM unit): the cloud is in SfM units, so every length in the
+    config has to be converted before it is compared with a coordinate.
+
+    Returns (Frame with a height profile, diagnostics dict).
+    """
+    up = up_from_cameras(vdirs)
+    C = centres - centres.mean(0)
+    C_pl = C - np.outer(C @ up, up)                       # trajectory projected into plan
+    _, _, vt = np.linalg.svd(C_pl, full_matrices=False)
+    u = vt[0] - (vt[0] @ up) * up
+    if np.linalg.norm(u) < 1e-9:
+        raise ValueError("degenerate trajectory: cameras are collinear in plan")
+    u = u / np.linalg.norm(u)
+    w = np.cross(up, u)
+    w = w / np.linalg.norm(w)
+
+    q = xyz - centres.mean(0)
+    s_all, t_all, z_all = q @ u, q @ w, xyz @ up
+    cw = float(mc.get("corridor_halfwidth_m", 12.0)) / max(k, 1e-9)     # m -> SfM units
+    corridor = np.abs(t_all) <= cw
+    if corridor.sum() < 1000:
+        raise ValueError(f"only {int(corridor.sum())} points within {cw * k:.0f} m of the flight path")
+
+    # upper envelope: topmost surface under the corridor, per along-axis bin
+    binw = float(mc.get("envelope_bin_m", 2.0)) / max(k, 1e-9)
+    pct = float(mc.get("envelope_pct", 90.0))
+    s_lo, s_hi = np.percentile(s_all[corridor], [1, 99])
+    edges = np.arange(s_lo, s_hi + binw, binw)
+    ks, kh = [], []
+    for lo in edges[:-1]:
+        sel = corridor & (s_all >= lo) & (s_all < lo + binw)
+        if sel.sum() < 30:
+            continue
+        ks.append(0.5 * (lo + lo + binw))
+        kh.append(float(np.percentile(z_all[sel], pct)))
+    if len(ks) < 4:
+        raise ValueError(f"envelope got only {len(ks)} usable bins")
+    ks, kh = np.array(ks), np.array(kh)
+    # light smoothing of the envelope (crown is smooth; single bins are not)
+    if len(ks) >= 5:
+        k = max(3, (len(ks) // 8) | 1)
+        kh = np.convolve(kh, np.ones(k) / k, mode="same")
+        kh[: k // 2], kh[-(k // 2):] = kh[k // 2], kh[-1 - k // 2]
+    d = -float(np.median(kh))
+    kh = kh + d                                             # h = 0 on the envelope
+    origin = centres.mean(0) - (centres.mean(0) @ up) * up   # on the plan of the trajectory
+    origin = origin + float(np.median(t_all[corridor])) * w  # keep the corridor centred at t = 0
+    fr = Frame(origin, u, w, up, d, deck=(ks, kh))
+
+    # diagnostics: measure the deck's own transverse extent and roughness, not the corridor cap
+    s, t, h = fr.local(xyz)
+    band = float(mc.get("deck_surface_band_m", 0.30)) / max(k, 1e-9)
+    on_deck = (np.abs(h) <= band) & corridor
+    hw = float(np.percentile(np.abs(t[on_deck]), 98)) * k if on_deck.sum() > 100 else float("nan")
+    rms = float(np.sqrt(np.mean(h[on_deck] ** 2))) * k if on_deck.sum() > 100 else float("nan")
+    diag = {"frame_source": "trajectory", "corridor_halfwidth_m": cw * k,
+            "deck_halfwidth_m": hw, "deck_rms_m": rms,
+            "n_deck_points": int(on_deck.sum()), "n_bins": int(len(ks)),
+            "envelope_range_m": [float(ks.min()) * k, float(ks.max()) * k]}
+    log(f"  trajectory frame: axis from {len(centres)} cameras, corridor +-{cw * k:.0f} m, "
+        f"{len(ks)} envelope bins")
+    log(f"  deck half width {hw:.2f} m, RMS {1e3 * rms:.0f} mm, "
+        f"{int(on_deck.sum()):,} surface points, envelope spans {(ks.max() - ks.min()) * k:.1f} m")
+    return fr, diag
+
+
 def make_frame(xyz, vdirs, k0, mc, total_m, seed=0, gps_k=None):
     """
     Shared frame from the dense cloud.
@@ -248,12 +323,25 @@ def main():
         hw, ground_h, boxes_auto, k0 = F["half_width_sfm"], F["ground_h_sfm"], F["pier_boxes_auto"], F["kappa_frame"]
         log(f"reusing frame, pier boxes and provisional scale from {fpath} (made from {F['made_from']})")
     else:
-        fr, hw, ground_h, k0 = make_frame(xyz, vdirs, k0, mc, total_m, gps_k=k_gps)
+        k_use = float(k_gps) if k_gps else k0
+        fdiag = {}
+        if mc.get("frame_source", "trajectory") == "trajectory":
+            try:
+                fr, fdiag = frame_from_trajectory(xyz, centres, vdirs, mc, k_use)
+                k0 = k_use
+                hw = fdiag["deck_halfwidth_m"] / max(k0, 1e-9)          # back to SfM units
+                ground_h = float(np.percentile(fr.local(xyz)[2], mc.get("ground_pct_fallback", 2.0)))
+            except (ValueError, np.linalg.LinAlgError) as e:
+                log(f"  trajectory frame failed ({e}) -- falling back to the RANSAC deck plane")
+                fr, hw, ground_h, k0 = make_frame(xyz, vdirs, k0, mc, total_m, gps_k=k_gps)
+        else:
+            fr, hw, ground_h, k0 = make_frame(xyz, vdirs, k0, mc, total_m, gps_k=k_gps)
         s, t, h = fr.local(xyz)
         boxes_auto, _ = auto_boxes(s, t, h, k0, hw, ground_h, mc, sep_target_m=sep_target)
         save_json({"frame": fr.to_dict(), "half_width_sfm": hw, "ground_h_sfm": ground_h,
                    "pier_boxes_auto": boxes_auto, "kappa0_prepare": prov["kappa0"], "kappa_frame": k0,
-                   "made_from": a.method}, fpath)
+                   "kappa_source": "gps" if k_gps else "girder_band", "gps_scale": gps,
+                   "frame_diag": fdiag, "made_from": a.method}, fpath)
         import yaml
         with open(os.path.join(out, "pier_boxes_auto.yaml"), "w") as f:
             yaml.safe_dump({"pier_boxes": boxes_auto}, f, sort_keys=False)
@@ -270,16 +358,25 @@ def main():
             a5, a95 = np.percentile(s[m], [lo_p, hi_p])
             piers.append({"station_sfm": float(0.5 * (a5 + a95)), "n": int(m.sum()), "box": b})
     piers.sort(key=lambda p: p["station_sfm"])
-    gb = (hm >= mc["girder_band_m"][0]) & (hm <= mc["girder_band_m"][1]) & (np.abs(tm) <= hw * k0)
+    gb = (hm >= mc["girder_band_m"][0]) & (hm <= mc["girder_band_m"][1]) & (np.abs(tm) <= min(hw * k0, mc.get("deck_halfwidth_max_m", 12.0)))
+    # Deck ends: the plan takes them at the abutment bearing lines, else at the deck end joints.
+    # The deck surface itself is the closest measurable proxy; the girder band is kept as fallback.
+    ds = (np.abs(hm) <= float(mc.get("deck_surface_band_m", 0.30))) & (np.abs(tm) <= min(hw * k0, mc.get("deck_halfwidth_max_m", 12.0)))
     if ov.get("end_stations"):
         ends = [v / k0 for v in ov["end_stations"]]
         end_src = ov.get("end_station_source") or "override"
+    elif mc.get("end_source", "deck_surface") == "deck_surface" and ds.sum() > 200:
+        ends = list(edge_stations(s[ds], mc.get("end_edge_bin_m", 0.25) / k0, mc.get("end_edge_frac", 0.2)))
+        end_src = "deck surface"
     elif gb.sum() > 50:
         ends = list(edge_stations(s[gb], mc.get("end_edge_bin_m", 0.25) / k0, mc.get("end_edge_frac", 0.2)))
         end_src = "girder band"
     else:
         ends = [float(np.percentile(s, 1)), float(np.percentile(s, 99))]
         end_src = "cloud extent"
+    if end_src in ("deck surface", "girder band"):
+        log(f"  ends from the {end_src}: {((ends[1] - ends[0]) * k0):.1f} m apart "
+            f"(bridge is {total_m:.1f} m)")
     res = {"method": a.method, "label": a.label or a.method, "n_points": int(len(xyz)), "kappa0": k0,
            "boxes": box_src, "end_stations_from": end_src, "n_piers_found": len(piers)}
     spans_ref = [v * FT_TO_M for v in vc["spans_ft"]]
