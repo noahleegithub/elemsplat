@@ -9,11 +9,14 @@
 #      MODEL=pointnet TRUE=0 sbatch --array=0-9 03b_instances.slurm
 # =============================================================================
 #SBATCH --job-name=fp_instances
-#SBATCH --time=06:00:00
+#SBATCH --time=12:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+# mem: the cable-stayed and suspension clouds are 100-300 M points and DBSCAN's neighbour
+# structures scale with them -- fold 1 peaked at 67 GB and was OOM-killed at 64 GB, while the
+# six mid-size folds stay under 6 GB. 256 G fits the largest fold on a 500 GB cpu node.
+#SBATCH --mem=256G
 #SBATCH --partition=cpu
 #SBATCH --array=0-9
 #SBATCH --output=logs/%x_%A_%a.out
