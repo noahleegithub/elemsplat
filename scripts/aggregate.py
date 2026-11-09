@@ -84,7 +84,31 @@ def instance_rows(root):
     return rows
 
 
-def instance_summary(rows):
+def fold_coverage(rows, expected):
+    """How much of each fold is actually on disk when the summary is built.
+
+    A pack built while the array is still running otherwise reports a sample it cannot name:
+    the instance means silently mix whole folds with clouds from a half-finished one.
+    """
+    if not expected:
+        return {}
+    seen = {}
+    for r in rows:
+        seen.setdefault(int(r["fold"]), set()).add(r["bridge"])
+    cov = {"expected": {str(k): v for k, v in sorted(expected.items())},
+           "complete": [], "partial": {}, "missing": []}
+    for k, exp in sorted(expected.items()):
+        got = len(seen.get(k, ()))
+        if got == exp:
+            cov["complete"].append(k)
+        elif got == 0:
+            cov["missing"].append(k)
+        else:
+            cov["partial"][str(k)] = [got, exp]
+    return cov
+
+
+def instance_summary(rows, expected=None):
     out = {}
     for src in sorted({r["classes"] for r in rows}):
         S = [r for r in rows if r["classes"] == src]
@@ -106,6 +130,7 @@ def instance_summary(rows):
             b1, b0 = trend_slope([r["N"] for r in R], [r["PQ"] for r in R])
             d["slope_all"], d["intercept_all"] = b1, b0
             out[src][meth] = d
+        out[src]["fold_coverage"] = fold_coverage(S, expected)
         pair, n_pair_dropped = {}, 0
         for r in S:
             pair.setdefault(r["bridge"], {"group": r["group"], "N": r["N"], "type": r["type"]})[f"pq_{r['method'].lower()}"] = r["PQ"]
@@ -165,9 +190,13 @@ def main():
     cfg = load_cfg(a.cfg)
     classes = cfg["brpcd"]["classes"]
     index = _index(a.data) if a.data else {}
+    expected = {}
+    _sp = os.path.join(a.data, "split.json") if a.data else ""
+    if _sp and os.path.exists(_sp):
+        expected = {int(x["fold"]): len(x["test"]) for x in load_json(_sp)["folds"]}
     rows = instance_rows(a.results)
     summ = {"classes": classes, "semseg": semseg_summary(a.results, index, len(classes)),
-            "instances": instance_summary(rows) if rows else {}, "trackB": trackb_summary(a.results),
+            "instances": instance_summary(rows, expected) if rows else {}, "trackB": trackb_summary(a.results),
             "rq3": load_json(os.path.join(a.results, "rq3", "merge.json"))
             if os.path.exists(os.path.join(a.results, "rq3", "merge.json")) else None,
             "rq3_extra": rq3_extra(a.results)}

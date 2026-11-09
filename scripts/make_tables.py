@@ -101,6 +101,36 @@ def semseg_perbridge(S, models, cfg):
     return table(caption, "tab:res-semseg-bridge", colspec, header, rows, note=note)
 
 
+def _ranges(xs):
+    xs = sorted(int(x) for x in xs)
+    out, i = [], 0
+    while i < len(xs):
+        j = i
+        while j + 1 < len(xs) and xs[j + 1] == xs[j] + 1:
+            j += 1
+        out.append(str(xs[i]) if i == j else f"{xs[i]}--{xs[j]}")
+        i = j + 1
+    return ", ".join(out)
+
+
+def fold_note(cov):
+    """One sentence naming exactly which folds the instance means cover."""
+    if not cov:
+        return None
+    parts = []
+    if cov.get("complete"):
+        parts.append(f"complete folds {_ranges(cov['complete'])}")
+    if cov.get("partial"):
+        parts.append("partial " + ", ".join(f"fold {k} ({v[0]}/{v[1]} clouds)"
+                                            for k, v in sorted(cov["partial"].items())))
+    if cov.get("missing"):
+        parts.append(f"no results yet for folds {_ranges(cov['missing'])}")
+    if not parts:
+        return None
+    return ("Fold coverage when this summary was built: " + "; ".join(parts)
+            + ". The means below are over the clouds present, so they are a snapshot, not a final result.")
+
+
 def instances(S, sources):
     rows = []
     I = (S or {}).get("instances", {})
@@ -117,8 +147,15 @@ def instances(S, sources):
     # failed fits are excluded from every M2 number above: say so in the table, not only in the log
     nf = sum(int((I.get(s, {}).get("M2", {}) or {}).get("n_failed") or 0) for s in sources)
     nd = sum(int(((I.get(s, {}).get("H1") or {}).get("n_dropped")) or 0) for s in sources)
-    note = (f"M2 layout fits that raised an error are excluded rather than scored as zero "
-            f"({nf} cloud(s) failed, {nd} bridge pairing(s) dropped from $\\Delta\\beta_1$).") if (nf or nd) else None
+    cov = next((I.get(s_, {}).get("fold_coverage") or {} for s_ in sources
+                if (I.get(s_, {}).get("fold_coverage") or {})), {})
+    bits = []
+    if nf or nd:
+        bits.append(f"M2 layout fits that raised an error are excluded rather than scored as zero "
+                    f"({nf} cloud(s) failed, {nd} bridge pairing(s) dropped from $\\Delta\\beta_1$).")
+    if fold_note(cov):
+        bits.append(fold_note(cov))
+    note = " ".join(bits) if bits else None
     return table("Member instances on BrPCD (\\%). PQ, SQ and RQ on the real test scans; PQ on the variants; "
                  "$\\beta_1$ is the slope of PQ against $\\log N$ (\\cref{eq:trend}) and $\\Delta\\beta_1$ = slope(M2) "
                  "$-$ slope(M1) with its 95\\% bridge-level bootstrap interval (H1 expects it to be positive).",
