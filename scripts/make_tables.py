@@ -57,6 +57,50 @@ def semantic(S, classes, models):
                  ["Model"] + [NICE[c] for c in classes] + ["mIoU real", "mIoU var."], rows)
 
 
+def semseg_perbridge(S, models, cfg):
+    r"""Per-bridge mIoU over girder/deck/pier, next to the BrPCD paper's own table.
+
+    The paper (Table 4) reports one mIoU per bridge, not a pooled mean, so this is the only
+    honest side-by-side. Bridges the paper does not tabulate are still shown, with "--" for
+    their reference value; the mean row averages every real bridge for every column.
+    """
+    ref = cfg.get("ref_semseg") or {}
+    paper = ref.get("values") or {}
+    per = {m: ((S or {}).get("semseg", {}).get(m, {}) or {}).get("per_bridge") or {} for m in models}
+    bridges = sorted({b for m in models for b in per[m]})
+    header = ["Bridge", "cls", "Paper"] + sum([[NICE.get(m, m), r"$\Delta$"] for m in models], [])
+    colspec = "@{}l" + "r" * (2 * len(models) + 2) + "@{}"
+    caption = r"Per-bridge semantic segmentation on BrPCD: mIoU over girder, deck and pier (\%)."
+    if not bridges:
+        return table(caption, "tab:res-semseg-bridge", colspec, header,
+                     [["(no run yet)", DASH, DASH] + [DASH] * (2 * len(models))],
+                     note="--summary was not given, or no fold has per-cloud metrics yet.")
+
+    rows, sums = [], {m: [] for m in models}
+    for b in bridges:
+        cls_n = max((per[m].get(b) or {}).get("n_cls", 0) for m in models)
+        row = [b, str(cls_n) if cls_n else DASH, f(paper.get(b), 1, 3)]
+        for m in models:
+            v = (per[m].get(b) or {}).get("miou")
+            sums[m].append(v)
+            d = (v - paper[b]) if (v is not None and b in paper) else None
+            row += [f(v, 1, 3), f(d, 1, 3)]
+        rows.append(row)
+
+    def mean_of(xs):
+        xs = [x for x in xs if x is not None]
+        return sum(xs) / len(xs) if xs else None
+
+    rows.append(["mean", "", DASH] + sum([[f(mean_of(sums[m]), 1, 3), ""] for m in models], []))
+    n_ref = sum(1 for b in bridges if b in paper)
+    note = (f"The paper's column is {ref.get('source', 'the BrPCD paper')}, over the classes each bridge "
+            f"labels. It covers {n_ref} of the {len(bridges)} real bridges here; the mean row averages all "
+            f"{len(bridges)} for every column, so it is not the paper's mean. Delta = ours minus paper. Our "
+            f"folds withhold the entire bridge while the reference trains on the complete databank, so a "
+            f"match is a reproduction under a stricter protocol, and a large negative is a real failure.")
+    return table(caption, "tab:res-semseg-bridge", colspec, header, rows, note=note)
+
+
 def instances(S, sources):
     rows = []
     I = (S or {}).get("instances", {})
@@ -211,7 +255,9 @@ def main():
     models = cfg["semseg"]["models"]
     sources = [m for m in models] + ["true"]
     spans_ref = [x * 0.3048 for x in cfg["vtti"]["spans_ft"]]
-    files = {"res_semantic.tex": semantic(S, classes, models), "res_instances.tex": instances(S, sources),
+    files = {"res_semantic.tex": semantic(S, classes, models),
+             "res_semseg_perbridge.tex": semseg_perbridge(S, models, cfg),
+             "res_instances.tex": instances(S, sources),
              "res_render.tex": render(S), "res_measure.tex": measure(S, spans_ref), "res_rq3.tex": rq3(S),
              "tab_settings_auto.tex": settings(cfg)}
     for name, tex in files.items():

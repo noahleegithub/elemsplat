@@ -30,12 +30,19 @@ def _index(data):
         return {r["bridge"]: r for r in csv.DictReader(f)}
 
 
-def semseg_summary(root, index, n_cls):
+def semseg_summary(root, index, n_cls, n_struct=3):
+    """Pooled IoU per model/split, plus per-real-bridge IoU over the first `n_struct` classes.
+
+    The pooled number is weighted by point count, and the cable-stayed and suspension clouds
+    carry 100-300 M points against 3-26 M for the rest, so four folds decide a pooled mean.
+    The BrPCD paper reports one mIoU per bridge instead; per_bridge is what makes the two
+    comparable, which is why it is stored alongside the pooled figure.
+    """
     out = {}
     for mdir in sorted(glob.glob(os.path.join(root, "trackA", "semseg", "*"))):
         model = os.path.basename(mdir)
         cm = {"real": np.zeros((n_cls, n_cls), np.int64), "variant": np.zeros((n_cls, n_cls), np.int64)}
-        n_folds, secs = 0, []
+        n_folds, secs, per_bridge = 0, [], {}
         for f in sorted(glob.glob(os.path.join(mdir, "fold_*", "metrics_semseg.json"))):
             if f.endswith(os.path.join("fold_all", "metrics_semseg.json")):
                 continue
@@ -45,10 +52,19 @@ def semseg_summary(root, index, n_cls):
             for b, v in r.get("per_cloud", {}).items():
                 key = "real" if index.get(b, {}).get("is_real") == "1" else "variant"
                 cm[key] += np.array(v["confusion"], np.int64)
+                # per-bridge score over the structural classes the cloud actually labels
+                if key == "real":
+                    iou, pres = v.get("iou") or [], v.get("present") or []
+                    vals = [iou[i] for i in range(min(n_struct, len(iou), len(pres)))
+                            if pres[i] and iou[i] is not None]
+                    if vals:
+                        per_bridge[b] = {"miou": float(np.mean(vals)), "n_cls": len(vals),
+                                         "oa": v.get("oa")}
         if n_folds:
             out[model] = {k: semantic_iou(None, None, n_cls, cm=c) for k, c in cm.items() if c.sum()}
             out[model]["n_folds"] = n_folds
             out[model]["train_hours_mean"] = float(np.mean(secs) / 3600) if secs else None
+            out[model]["per_bridge"] = per_bridge
     return out
 
 

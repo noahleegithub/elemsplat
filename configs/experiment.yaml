@@ -165,3 +165,17 @@ merge:                          # RQ3
   ref_counts:
     piers: 2
     girders: null               # count the girders on the photographs, then fill in
+
+# Reference values of the published baseline, used by make_tables.py for res_semseg_perbridge.tex.
+# Source: Zhang, Zhu, Xiong & Cai, "A bridge point cloud databank for digital bridge understanding",
+# Computer-Aided Civil and Infrastructure Engineering, 2025 -- Table 4, Group 3 (complete training
+# set), mIoU per bridge over the classes that bridge labels. Their Group 3 trains on the complete
+# databank; our leave-one-bridge-out folds withhold the whole bridge, so these are not the same
+# protocol and the table says so.
+ref_semseg:
+  source: "Zhang et al., CACAIE 2025, Table 4, Group 3"
+  values:
+    c-bridge1: 0.927
+    c-bridge2: 0.836
+    s-bridge1: 0.937
+    c-bridge5: 0.797
