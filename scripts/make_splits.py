@@ -55,11 +55,17 @@ def main():
             if not fam:
                 log(f"skip {r['bridge']}: no other real scan of type {r['type']}")
                 continue
-            val_src = fam[k % len(fam)]["bridge"]
-            val = members(val_src)
             own = members(r["bridge"])
-            held_in = [b for b in own if b != r["bridge"]][:a.target_variants]
-            train = sorted(set(b for o in fam for b in members(o["bridge"])) - set(val) | set(held_in))
+            own_var = [b for b in own if b != r["bridge"]]
+            held_in = own_var[:a.target_variants]
+            if len(fam) >= 3:                     # enough bridges to hold one out for validation
+                val = members(fam[k % len(fam)]["bridge"])
+                train = sorted(set(b for o in fam for b in members(o["bridge"])) - set(val) | set(held_in))
+            else:                                 # 2-bridge family: validate on the target's own variants
+                val = own_var[a.target_variants:a.target_variants + 2]
+                train = sorted(set(b for o in fam for b in members(o["bridge"])) | set(held_in))
+            if not val:
+                sys.exit(f"paper mode: {r['bridge']} has too few variants for a validation split")
             folds.append({"fold": k, "test_scan": r["bridge"], "type": r["type"],
                           "test": [r["bridge"]], "val": val, "train": train,
                           "paper_target_variants": held_in})
