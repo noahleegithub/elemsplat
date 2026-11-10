@@ -25,6 +25,32 @@ def dbscan_labels(xyz, eps, min_pts, base_voxel=0.0, n_jobs=-1):
     return lab
 
 
+def prepare_thinning(xyz, eps, base_voxel=0.0):
+    """Voxel thinning + nearest-thinned-point lookup for one eps.
+
+    Both depend only on eps, so a hyperparameter sweep over min_pts can reuse them instead of
+    re-querying the whole cloud for every cell -- on a 300 M-point cloud that query is the whole
+    cost of tuning.
+    """
+    vox = max(eps / 3.0, base_voxel)
+    if vox > base_voxel * 1.01:
+        idx = voxel_downsample_idx(xyz, vox)
+        d, j = cKDTree(xyz[idx]).query(xyz, k=1, workers=-1)
+        return idx, d, j
+    return np.arange(len(xyz)), None, None
+
+
+def labels_from_prepared(xyz, prep, eps, min_pts, n_jobs=-1):
+    """DBSCAN on the prepared thinning, expanded back to every original point."""
+    idx, d, j = prep
+    lab_s = DBSCAN(eps=eps, min_samples=min_pts, n_jobs=n_jobs).fit_predict(xyz[idx])
+    if d is None:
+        return lab_s
+    lab = lab_s[j]
+    lab[d > eps] = -1
+    return lab
+
+
 def run_m1(xyz, cls, params, base_voxel=0.0, n_jobs=-1):
     """params: {class id: (eps, min_pts)}. Returns instance ids unique across classes (-1 = noise)."""
     inst = np.full(len(xyz), -1, np.int64)

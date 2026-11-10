@@ -20,7 +20,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cluster_m1 import run_m1  # noqa: E402
+from cluster_m1 import labels_from_prepared, prepare_thinning, run_m1  # noqa: E402
 from common import load_cfg, load_json, log, m1_default, save_json  # noqa: E402
 from layout_m2 import run_m2  # noqa: E402
 from metrics import panoptic_quality  # noqa: E402
@@ -47,22 +47,42 @@ def pq_of(c, inst, classes, mcfg, only=None):
 
 
 def tune_m1(val, cfg, n_cls, voxel):
+    """Grid search per class, ordered eps-outer so the thinning is built once per (class, eps).
+
+    Building it per grid cell instead re-queried every point of every validation cloud 24 times,
+    which is what stalled the largest cable-stayed fold past 12 h with no output.
+    """
     grid = list(itertools.product(cfg["m1"]["eps_grid"], cfg["m1"]["min_pts_grid"]))
+    n_cells = len(grid)
     best = {}
     for c in range(n_cls):
-        scores = []
-        for eps, mp in grid:
-            vals = []
-            for v in val:
-                if not (v["gt_cls"] == c).any():
-                    continue
-                inst = run_m1(v["xyz"], v["cls"], {c: (eps, mp)}, base_voxel=voxel)
-                r = pq_of(v, inst, list(range(n_cls)), cfg["metrics"], only=c)
-                if np.isfinite(r["PQ"]):
-                    vals.append(r["PQ"])
-            scores.append(np.mean(vals) if vals else -1)
-        j = int(np.argmax(scores))
-        best[c] = grid[j] if scores[j] >= 0 else m1_default(cfg)
+        clouds = [v for v in val if (v["gt_cls"] == c).any()]
+        if not clouds:
+            best[c] = m1_default(cfg)
+            log(f"  tune M1 class {c}: no validation cloud labels it, defaults kept")
+            continue
+        scores, done = [], 0
+        for eps in sorted({g[0] for g in grid}):
+            preps = [prepare_thinning(v["xyz"][v["cls"] == c], eps, voxel) for v in clouds]
+            for mp in sorted({g[1] for g in grid if g[0] == eps}):
+                vals = []
+                for v, prep in zip(clouds, preps):
+                    inst = np.full(len(v["xyz"]), -1, np.int64)
+                    m = v["cls"] == c
+                    lab = labels_from_prepared(v["xyz"][m], prep, eps, mp)
+                    good = lab >= 0
+                    if good.any():
+                        u, inv = np.unique(lab[good], return_inverse=True)
+                        inst[np.flatnonzero(m)[good]] = np.asarray(inv).ravel()
+                    r = pq_of(v, inst, list(range(n_cls)), cfg["metrics"], only=c)
+                    if np.isfinite(r["PQ"]):
+                        vals.append(r["PQ"])
+                scores.append((np.mean(vals) if vals else -1, eps, mp))
+                done += 1
+                log(f"  tune M1 class {c} cell {done}/{n_cells} eps={eps} min_pts={mp} "
+                    f"PQ={scores[-1][0]:.4f}")
+        scores.sort(key=lambda t: -t[0])
+        best[c] = (scores[0][1], scores[0][2]) if scores[0][0] >= 0 else m1_default(cfg)
     return best
 
 
