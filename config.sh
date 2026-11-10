@@ -61,11 +61,11 @@ export VGGT_HF_ID="facebook/VGGT-1B"               # weights (non-commercial lic
 
 export DATA_ROOT="${HW_ROOT}/final_data"
 export BRPCD_RAW="${DATA_ROOT}/brpcd_raw"          # Google Drive download, extracted
-export BRPCD_DIR="${DATA_ROOT}/brpcd"              # converted clouds (*.npz) + index.csv + split.json
+export BRPCD_DIR="${BRPCD_DIR:-${DATA_ROOT}/brpcd}"              # converted clouds (*.npz) + index.csv + split.json
 export VTTI_RAW="${DATA_ROOT}/vtti_raw"            # figshare zips
 export VTTI_DIR="${DATA_ROOT}/vtti"                # extracted dataset
 export VTTI_SCENE="${DATA_ROOT}/vtti_scene"        # 3DGS/2DGS scene: images/ (undistorted, 1600 px) + sparse/0
-export RESULTS_DIR="${HW_ROOT}/final_results"
+export RESULTS_DIR="${RESULTS_DIR:-${HW_ROOT}/final_results}"
 export SMOKE_DIR="${HW_ROOT}/final_smoke"          # synthetic end-to-end test (CPU, minutes)
 export EXPERIMENT_YAML="${HW_SCRIPTS}/configs/experiment.yaml"
 
