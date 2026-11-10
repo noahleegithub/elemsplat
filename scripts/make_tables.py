@@ -93,11 +93,15 @@ def semseg_perbridge(S, models, cfg):
 
     rows.append(["mean", "", DASH] + sum([[f(mean_of(sums[m]), 1, 3), ""] for m in models], []))
     n_ref = sum(1 for b in bridges if b in paper)
-    note = (f"The paper's column is {ref.get('source', 'the BrPCD paper')}, over the classes each bridge "
-            f"labels. It covers {n_ref} of the {len(bridges)} real bridges here; the mean row averages all "
-            f"{len(bridges)} for every column, so it is not the paper's mean. Delta = ours minus paper. Our "
-            f"folds withhold the entire bridge while the reference trains on the complete databank, so a "
-            f"match is a reproduction under a stricter protocol, and a large negative is a real failure.")
+    note = (f"The reference column is {ref.get('source', 'the BrPCD paper')}, over the classes each bridge "
+            f"labels; it covers {n_ref} of the {len(bridges)} real bridges here, and the mean row averages all "
+            f"{len(bridges)}, so that row is not the paper's mean. $\\Delta$ = ours $-$ paper. "
+            f"\\textbf{{The two columns are not the same experiment.}} The paper trains one network per bridge "
+            f"family (girder, cable-stayed, suspension separately) and puts one or two augmented clouds of the "
+            f"bridge being predicted into its training set. We train a single network over all three families and "
+            f"withhold the bridge entirely, so every cloud of it is unseen. Our protocol is the stricter one: "
+            f"the girder and deck classes survive the comparison, and the cable classes do not, because in our "
+            f"setup a stay, a main cable and a suspender compete inside one label space.")
     return table(caption, "tab:res-semseg-bridge", colspec, header, rows, note=note)
 
 
