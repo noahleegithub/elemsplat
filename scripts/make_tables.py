@@ -193,10 +193,48 @@ def measure(S, spans_ref):
         rms = (d.get("deck_rms_m") or {}).get("median")
         rows.append([d.get("label", key.upper()), f(d.get("kappa"), 1, 4), f(sp[0], 1, 3), f(sp[1], 1, 3), f(sp[2], 1, 3),
                      f(er[0], 100, 2, True), f(er[2], 100, 2, True), f(rms, 1000, 1)])
-    return table("Metric checks on VTTI. The scale $\\kappa$ fixes the 150\\,ft main span ($L_2$, exact by construction); "
-                 "the 90\\,ft side spans $L_1$ and $L_3$ are the check (target error 2\\%). Deck residual = median "
-                 "plane-fit RMS over 2\\,m patches, in mm.", "tab:res-measure", "@{}lrrrrrrr@{}",
+    src = {d.get("kappa_source") for d in M.values()}
+    gps = "gps" in src
+    cap = ("Metric checks on VTTI. $\\kappa$ is the GPS scale, so every span including the main span $L_2$ is a genuine "
+           "check against the reference (target error 2\\%); nothing here is exact by construction. Deck residual = "
+           "median plane-fit RMS over 2\\,m patches, in mm." if gps else
+           "Metric checks on VTTI. With no GPS track $\\kappa$ is defined by the main span ($L_2$, exact by "
+           "construction) and only the 90\\,ft side spans $L_1$ and $L_3$ are checks (target error 2\\%). Deck "
+           "residual = median plane-fit RMS over 2\\,m patches, in mm.")
+    return table(cap, "tab:res-measure", "@{}lrrrrrrr@{}",
                  ["Method", "$\\kappa$", "$L_1$ (m)", "$L_2$ (m)", "$L_3$ (m)", "$e_1$", "$e_3$", "Deck RMS"], rows)
+
+
+def ratios(S, spans_ref):
+    """Scale-free span ratios: the same failure with kappa divided out.
+
+    A pipeline that cannot get the ratios right has a shape problem, not a scale problem, and no
+    calibration can rescue it -- which is the objection a metric-scale claim has to survive.
+    """
+    M = ((S or {}).get("trackB") or {}).get("measure", {})
+    if not M:
+        return table("Scale-free span ratios ($L_1/L_2$, $L_3/L_2$).", "tab:res-ratios", "@{}lrrrr@{}",
+                     ["Method", "$L_1/L_2$", "$L_3/L_2$", "$\\Delta_1$", "$\\Delta_3$"],
+                     [["(no measurement yet)", DASH, DASH, DASH, DASH]],
+                     note="The ratios need no scale, so they test shape alone.")
+    r1, r3 = spans_ref[0] / spans_ref[1], spans_ref[2] / spans_ref[1]
+    rows = [["Reference", f(r1, 1, 3), f(r3, 1, 3), DASH, DASH]]
+    keys = [k for k in ("3dgs", "2dgs", "2dgs_mean") if k in M] + sorted(k for k in M if k not in ("3dgs", "2dgs", "2dgs_mean"))
+    for key in keys:
+        d = M.get(key, {})
+        sp = d.get("spans_m") or [None] * 3
+        if not all(isinstance(v, (int, float)) for v in sp) or not sp[1]:
+            rows.append([d.get("label", key.upper()), DASH, DASH, DASH, DASH])
+            continue
+        q1, q3 = sp[0] / sp[1], sp[2] / sp[1]
+        rows.append([d.get("label", key.upper()), f(q1, 1, 3), f(q3, 1, 3),
+                     f((q1 - r1) / r1, 100, 2, True), f((q3 - r3) / r3, 100, 2, True)])
+    return table("Scale-free span ratios. Dividing by the measured main span removes $\\kappa$ entirely, so these "
+                 "numbers test the shape of the recovered geometry with no calibration in play. $\\Delta$ = relative "
+                 "error of the ratio against the reference bridge, which is 90/150/90\\,ft and therefore gives "
+                 "$L_1/L_2 = L_3/L_2 = 0.600$.",
+                 "tab:res-ratios", "@{}lrrrr@{}",
+                 ["Method", "$L_1/L_2$", "$L_3/L_2$", "$\\Delta_1$", "$\\Delta_3$"], rows)
 
 
 def _spacing(m2):
@@ -299,7 +337,8 @@ def main():
     files = {"res_semantic.tex": semantic(S, classes, models),
              "res_semseg_perbridge.tex": semseg_perbridge(S, models, cfg),
              "res_instances.tex": instances(S, sources),
-             "res_render.tex": render(S), "res_measure.tex": measure(S, spans_ref), "res_rq3.tex": rq3(S),
+             "res_render.tex": render(S), "res_measure.tex": measure(S, spans_ref), "res_ratios.tex": ratios(S, spans_ref),
+             "res_rq3.tex": rq3(S),
              "tab_settings_auto.tex": settings(cfg)}
     for name, tex in files.items():
         with open(os.path.join(a.out, name), "w") as fh:
