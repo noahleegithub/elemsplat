@@ -263,8 +263,17 @@ def rq3(S):
     if ex:
         cap += " The last column" + ("s repeat" if len(ex) > 1 else " repeats") + " M2 on the " + \
                ", ".join(n for n, _ in ex) + " points."
+    note = None
+    share = R.get("class_share") or {}
+    g = share.get("girder")
+    if g is not None and g > 0.75:
+        note = (f"\\textbf{{This run does not support RQ3.}} The semantic model was trained on BrPCD laser scans and "
+                f"transfers badly to the GS points: {100 * g:.1f}\\% of them are labelled girder and only "
+                f"{100 * share.get('deck', 0):.1f}\\% deck, so the instance stage is separating one overwhelming "
+                f"class. Both methods return implausible counts for a two-pier bridge, and the reference girder "
+                f"count has not been established from the photographs, so no accuracy claim can be made either way.")
     return table(cap, "tab:res-rq3", "@{}lrrr" + "r" * len(ex) + "@{}",
-                 ["Quantity", "Reference", "M1", "M2"] + [f"M2 ({n})" for n, _ in ex], rows)
+                 ["Quantity", "Reference", "M1", "M2"] + [f"M2 ({n})" for n, _ in ex], rows, note=note)
 
 
 def settings(cfg):
