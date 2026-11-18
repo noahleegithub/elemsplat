@@ -118,6 +118,14 @@ gs2d:                           # Eqs. 13-15, official code
   depth_trunc_m: 60.0
   num_cluster: 50
 
+pgsr:                           # planar-based GS (Chen et al., TVCG 2024), third method in Track B
+  iterations: 30000             # repo default; DTU 0.5 h / TnT 45 min on a 24 GB card
+  eval_split: llffhold8         # same every-8th-view test split as 3DGS and 2DGS
+  notes: >
+    Two source patches are required on ACES and are applied by build_pgsr.sh: CUDA arch
+    80;90 instead of 70;75;86, and the pytorch3d quaternion helper replaced locally. The
+    extensions are installed into final_gs because /scratch is at its 250k file cap.
+
 vggt:                           # feed-forward baseline (Wang et al., 2025), no camera input
   enabled: true                 # false: 03g is skipped and the VGGT rows disappear from the tables
   max_frames: 200               # uniform subset of the registered images in ONE forward pass
