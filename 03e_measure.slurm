@@ -37,5 +37,6 @@ hw_banner "MEASURE on $(hostname)"
 run "${P}/pts_2dgs.npz"      2dgs      "2DGS"                  || exit 1
 run "${P}/pts_3dgs.npz"      3dgs      "3DGS"                  || exit 1
 run "${P}/pts_2dgs_mean.npz" 2dgs_mean "2DGS (expected depth)" || exit 1
+run "${P}/pts_pgsr.npz"      pgsr      "PGSR (planar)"          || exit 1
 run "${P}/pts_vggt.npz"      vggt      "VGGT (feed-forward)"   || exit 1
 hw_banner "MEASURE DONE -> ${TB}/measure  (check diag_*.png before trusting the numbers)"

@@ -155,7 +155,10 @@ def trackb_summary(root):
     tb = os.path.join(root, "trackB")
     out = {"prepare": load_json(os.path.join(tb, "vtti_prepare.json")) if os.path.exists(os.path.join(tb, "vtti_prepare.json")) else None,
            "render": {}, "measure": {}}
-    for meth in ("gs3d", "gs2d"):
+    # every method directory that carries render metrics, so a new method needs no code change
+    for meth in sorted(d for d in os.listdir(tb) if os.path.isdir(os.path.join(tb, d))):
+        if meth in ("measure", "points", "vggt"):
+            continue
         d = {}
         for name in ("metrics_images.json", "run_info.json"):
             p = os.path.join(tb, meth, name)

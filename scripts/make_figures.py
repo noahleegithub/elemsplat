@@ -201,36 +201,42 @@ def _views(model_dir, it):
 
 
 def fig_render(results, cfg, out):
+    """Held-out views, one column per reconstruction method that finished."""
     tb = os.path.join(results, "trackB")
-    it3, it2 = cfg["gs3d"]["iterations"], cfg["gs2d"]["iterations"]
-    r3, d3 = _views(os.path.join(tb, "gs3d"), it3)
-    r2, d2 = _views(os.path.join(tb, "gs2d"), it2)
-    if not r3 or not r2:
-        return placeholder(out, "fig_render", "Held-out views (photo | 3DGS | 2DGS | 2DGS normals): waiting for 03c/03d", 2.0)
+    cands = [("3DGS", "gs3d", cfg["gs3d"]["iterations"]),
+             ("2DGS", "gs2d", cfg["gs2d"]["iterations"]),
+             ("PGSR", "gs_pgsr", cfg.get("pgsr", {}).get("iterations", cfg["gs3d"]["iterations"]))]
+    have = []
+    for label, d, it in cands:
+        r, g = _views(os.path.join(tb, d), it)
+        if r:
+            have.append((label, d, it, r, g))
+    if len(have) < 2:
+        return placeholder(out, "fig_render", "Held-out views: waiting for at least two of 03c/03d/03h", 2.0)
+
     from PIL import Image
-    m2 = os.path.join(tb, "gs2d", "metrics_images.json")
-    m3 = os.path.join(tb, "gs3d", "metrics_images.json")
-    per2 = load_json(m2)["per_view"] if os.path.exists(m2) else {}
-    per3 = load_json(m3)["per_view"] if os.path.exists(m3) else {}
-    names = [os.path.basename(p) for p in r2 if os.path.exists(os.path.join(d3, "renders", os.path.basename(p)))]
-    if per2:
-        names = sorted(names, key=lambda n: per2.get(n, {}).get("psnr", 0))
+    per = {}
+    for label, d, _, _, _ in have:
+        m = os.path.join(tb, d, "metrics_images.json")
+        per[label] = (load_json(m)["per_view"] if os.path.exists(m) else {}) or {}
+
+    base = have[0]
+    names = [os.path.basename(p) for p in base[3]]
+    if per[base[0]]:
+        names = sorted(names, key=lambda n: per[base[0]].get(n, {}).get("psnr", 0))
     pick = [names[len(names) // 2], names[0]] if len(names) > 1 else names
-    vis = os.path.join(d2, "vis")
-    cols = 4 if os.path.isdir(vis) else 3
-    fig, axes = plt.subplots(len(pick), cols, figsize=(W, 1.0 * len(pick) * 5.5 / cols * 0.75 + 0.3), squeeze=False)
+
+    cols = 1 + len(have)
+    fig, axes = plt.subplots(len(pick), cols, figsize=(W, 1.05 * len(pick) * 6.2 / cols + 0.35), squeeze=False)
     for row, n in zip(axes, pick):
-        panels = [("photo", os.path.join(d2, "gt", n)), ("3DGS", os.path.join(d3, "renders", n)),
-                  ("2DGS", os.path.join(d2, "renders", n))]
-        if cols == 4:
-            nn = sorted(glob.glob(os.path.join(vis, f"normal_{os.path.splitext(n)[0]}*"))) or \
-                 sorted(glob.glob(os.path.join(vis, f"*normal*{os.path.splitext(n)[0]}*")))
-            panels.append(("2DGS normals", nn[0] if nn else None))
+        panels = [("photo", os.path.join(have[0][4], "gt", n))]
+        for label, d, _, _, gr in have:
+            panels.append((label, os.path.join(gr, "renders", n)))
         for ax, (lab, path) in zip(row, panels):
             ax.axis("off")
             if path and os.path.exists(path):
                 ax.imshow(Image.open(path))
-            sc = {"3DGS": per3.get(n, {}), "2DGS": per2.get(n, {})}.get(lab, {})
+            sc = per.get(lab, {}).get(n, {})
             ax.set_title(lab + (f"  {sc['psnr']:.2f} dB" if sc.get("psnr") else ""), fontsize=7)
     fig.tight_layout()
     save(fig, out, "fig_render")

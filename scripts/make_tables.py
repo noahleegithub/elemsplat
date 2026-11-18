@@ -171,11 +171,15 @@ def instances(S, sources):
 def render(S):
     R = ((S or {}).get("trackB") or {}).get("render", {})
     rows = []
-    for key, name in (("gs3d", "3DGS"), ("gs2d", "2DGS")):
+    nice = {"gs3d": "3DGS", "gs2d": "2DGS", "gs_pgsr": "PGSR"}
+    order = [k for k in ("gs3d", "gs2d", "gs_pgsr") if k in R] + \
+            sorted(k for k in R if k not in ("gs3d", "gs2d", "gs_pgsr"))
+    for key in order:
         d = R.get(key, {})
         m = d.get("metrics_images", {}).get("mean", {})
         info = d.get("run_info", {})
-        rows.append([name, f(m.get("psnr"), 1, 2), f(m.get("ssim"), 1, 3), f(m.get("lpips"), 1, 3),
+        rows.append([nice.get(key, str(info.get("method", key)).upper()),
+                     f(m.get("psnr"), 1, 2), f(m.get("ssim"), 1, 3), f(m.get("lpips"), 1, 3),
                      f(info.get("train_seconds"), 1 / 60, 0), f(info.get("n_gaussians"), 1e-6, 2)])
     return table("Rendering on the held-out VTTI views (every 8th image). Training time in minutes and the final "
                  "number of Gaussians in millions.", "tab:res-render", "@{}lrrrrr@{}",
