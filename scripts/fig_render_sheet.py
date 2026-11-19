@@ -44,6 +44,26 @@ def view_map(model_dir, it, base_names):
     return dict(zip(base_names, files))
 
 
+def metric_map(model_dir, base_names):
+    """Return {base_view_name: {psnr, ssim, lpips}} for one method.
+
+    metrics_images.json inherits the method's own naming, so PGSR's per_view is keyed by
+    DJI_0619.png while the sheet indexes 00025.png. Re-key by position when the names differ,
+    otherwise every PGSR cell prints nan.
+    """
+    p = os.path.join(model_dir, "metrics_images.json")
+    if not os.path.exists(p):
+        return {}
+    d = load_json(p).get("per_view") or {}
+    if set(d) & set(base_names):
+        return {k: v for k, v in d.items() if k in base_names}
+    keys = sorted(d)
+    if len(keys) == len(base_names):
+        return dict(zip(base_names, [d[k] for k in keys]))
+    print(f"WARNING: {model_dir}: {len(keys)} metric rows vs {len(base_names)} views, PSNR suppressed")
+    return {}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True)
@@ -66,10 +86,7 @@ def main():
         sys.exit("no renders found under trackB/*/test/ours_*/renders")
 
     paths = {label: view_map(os.path.join(tb, sub), a.iterations, base) for label, sub in METHODS}
-    psnr = {}
-    for label, sub in METHODS:
-        p = os.path.join(tb, sub, "metrics_images.json")
-        psnr[label] = (load_json(p).get("per_view") or {}) if os.path.exists(p) else {}
+    psnr = {label: metric_map(os.path.join(tb, sub), base) for label, sub in METHODS}
 
     # rank by the mean of the three methods' PSNR so the sample reflects the methods, not one of them
     def rank_key(n):
