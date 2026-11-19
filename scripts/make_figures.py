@@ -270,6 +270,15 @@ def _wrap(label, width=14):
     return textwrap.fill(label, width)
 
 
+# Short tick/title names. The long labels ("2DGS (expected depth)") collide once four methods share
+# one axis; the caption carries the full wording.
+SHORT = {"2dgs": "2DGS", "3dgs": "3DGS", "2dgs_mean": "2DGS-ED", "pgsr": "PGSR", "vggt": "VGGT"}
+
+
+def _short(key, entry):
+    return SHORT.get(key) or _wrap((entry or {}).get("label", key), 11)
+
+
 def fig_measure(summary, out):
     M = (((summary or {}).get("trackB") or {}).get("measure")) or {}
     M = {k: v for k, v in M.items() if v.get("rel_err")}
@@ -290,7 +299,7 @@ def fig_measure(summary, out):
     a1.set_ylabel("relative error (%)")
     ymax = max([2.0] + [100 * M[k]["rel_err"][i] for k in order for i in (0, 2)])
     a1.set_ylim(0, 1.35 * ymax)
-    a1.legend(frameon=False, fontsize=6.5, loc="upper left", ncol=1)
+    a1.legend(frameon=False, fontsize=6, loc="upper left", ncol=2, handlelength=1.2, columnspacing=0.8)
     data = [np.array(M[k].get("deck_rms_m", {}).get("values") or [np.nan]) * 1000 for k in order]
     bp = a2.boxplot(data, patch_artist=True, widths=0.5, showfliers=False)  # vertical is the default
     for patch, k in zip(bp["boxes"], order):
@@ -300,7 +309,7 @@ def fig_measure(summary, out):
     for med in bp["medians"]:
         med.set_color(INK)
     a2.set_xticks(range(1, len(order) + 1))
-    a2.set_xticklabels([_wrap(M[k].get("label", k)) for k in order])
+    a2.set_xticklabels([_short(k, M[k]) for k in order], rotation=20, ha="right", fontsize=6.5)
     a2.set_ylabel("deck patch RMS (mm)")
     fig.tight_layout()
     save(fig, out, "fig_measure")
@@ -340,7 +349,7 @@ def fig_cross_section(results, summary, out):
     for ax, (k, sel) in zip(axes[0], slices):
         ax.scatter(sel[:, 1], sel[:, 2], s=0.6, c=col[k], linewidths=0, rasterized=True)
         ax.axhline(0.0, color=INK2, lw=0.6, ls=":")
-        ax.set_title(f"{M[k].get('label', k)} ({len(sel):,} pts)", fontsize=7)
+        ax.set_title(f"{_short(k, M[k])}\n({len(sel):,} pts)", fontsize=6.5)
         ax.set_xlabel("t (m)")
         ax.set_xlim(t0, t1)
         ax.set_ylim(h0, h1)
