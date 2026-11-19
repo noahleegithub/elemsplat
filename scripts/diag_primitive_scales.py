@@ -47,7 +47,10 @@ def main():
         cols, idx = read_ply(path)
         def col(name):
             return cols[idx[name]].astype(np.float64)
-        scales = np.stack([np.exp(col(f"scale_{i}")) for i in range(3)], 1)
+        # 3DGS stores three log-scales; the 2DGS and PGSR forks store two plus a normal,
+        # i.e. the disk has zero thickness by construction rather than by optimisation.
+        snames = sorted((n for n in idx if n.startswith("scale_")), key=lambda n: int(n.split("_")[1]))
+        scales = np.stack([np.exp(col(n)) for n in snames], 1)
         opac = 1.0 / (1.0 + np.exp(-col("opacity")))
         keep = opac > 0.5
         s = scales[keep]
@@ -56,7 +59,8 @@ def main():
         print(f"{label:<10}{keep.sum():>10,}{100 * keep.mean():>7.1f}%"
               f"{np.median(s_min) * 1000:>11.2f}mm{np.median(s_max) * 1000:>12.1f}mm"
               f"{np.median(s_max / np.maximum(s_min, 1e-12)):>8.0f}"
-              f"{100 * (s_min < 1e-3).mean():>7.1f}%{100 * (s_min < 1e-2).mean():>7.1f}%")
+              f"{100 * (s_min < 1e-3).mean():>7.1f}%{100 * (s_min < 1e-2).mean():>7.1f}%"
+              f"   {len(snames)} scales")
 
 
 if __name__ == "__main__":
