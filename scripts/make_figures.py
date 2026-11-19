@@ -221,22 +221,40 @@ def fig_render(results, cfg, out):
         per[label] = (load_json(m)["per_view"] if os.path.exists(m) else {}) or {}
 
     base = have[0]
-    names = [os.path.basename(p) for p in base[3]]
+    base_names = sorted(os.path.basename(p) for p in base[3])
+
+    # Methods do not share a render naming scheme: 3DGS/2DGS write 00028.png by position in the
+    # sorted test list, PGSR writes DJI_0619.png by image name. Match by name where possible and
+    # fall back to position -- the order is the same because every method renders the same split,
+    # and a silent name miss draws an empty panel under a correct column heading.
+    resolved = {}
+    for label, d, _, r, _gr in have:
+        own = sorted(r)
+        own_names = [os.path.basename(p) for p in own]
+        if set(own_names) & set(base_names):
+            resolved[label] = {n: p for n, p in zip(own_names, own) if n in base_names}
+        else:
+            assert len(own) == len(base_names), (
+                f"fig_render: {label} has {len(own)} renders but {len(base_names)} base views, and "
+                "the file names do not overlap, so position matching is unsafe")
+            resolved[label] = dict(zip(base_names, own))
+
     if per[base[0]]:
-        names = sorted(names, key=lambda n: per[base[0]].get(n, {}).get("psnr", 0))
-    pick = [names[len(names) // 2], names[0]] if len(names) > 1 else names
+        base_names = sorted(base_names, key=lambda n: per[base[0]].get(n, {}).get("psnr", 0))
+    pick = [base_names[len(base_names) // 2], base_names[0]] if len(base_names) > 1 else base_names
 
     cols = 1 + len(have)
     fig, axes = plt.subplots(len(pick), cols, figsize=(W, 1.05 * len(pick) * 6.2 / cols + 0.35), squeeze=False)
     for row, n in zip(axes, pick):
-        panels = [("photo", os.path.join(have[0][4], "gt", n))]
+        panels = [("photo", os.path.join(have[0][4], "gt", n), n)]
         for label, d, _, _, gr in have:
-            panels.append((label, os.path.join(gr, "renders", n)))
-        for ax, (lab, path) in zip(row, panels):
+            p = resolved[label].get(n)
+            panels.append((label, p, os.path.basename(p) if p else n))
+        for ax, (lab, path, key) in zip(row, panels):
             ax.axis("off")
             if path and os.path.exists(path):
                 ax.imshow(Image.open(path))
-            sc = per.get(lab, {}).get(n, {})
+            sc = per.get(lab, {}).get(key, {})
             ax.set_title(lab + (f"  {sc['psnr']:.2f} dB" if sc.get("psnr") else ""), fontsize=7)
     fig.tight_layout()
     save(fig, out, "fig_render")
